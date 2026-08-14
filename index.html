@@ -1,0 +1,599 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>แดชบอร์ดราคาพืชและเตือนภัยการผลิต</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Kanit:wght@400;500;600;700&family=Sarabun:wght@400;500;600;700&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<style>
+  :root{
+    --green:#1f7a3d; --green-d:#155a2c; --green-l:#e8f5ec; --green-l2:#d4ecdb;
+    --amber:#d97706; --amber-l:#fef3e2; --red:#dc2626; --red-l:#fdecec;
+    --ink:#1f2937; --muted:#6b7280; --line:#e5e7eb; --bg:#f4f6f5; --card:#ffffff;
+    --shadow:0 1px 3px rgba(0,0,0,.08),0 1px 2px rgba(0,0,0,.04);
+  }
+  *{box-sizing:border-box}
+  body{margin:0;font-family:'Sarabun',system-ui,sans-serif;background:var(--bg);color:var(--ink);font-size:15px;line-height:1.5}
+  h1,h2,h3,.f-kanit{font-family:'Kanit',sans-serif;font-weight:600}
+  header{background:linear-gradient(135deg,var(--green),var(--green-d));color:#fff;padding:22px 26px}
+  header .wrap{max-width:1240px;margin:0 auto}
+  header h1{margin:0;font-size:26px;letter-spacing:.2px}
+  header p{margin:6px 0 0;opacity:.92;font-size:14px}
+  header a{color:#d9f2e0;text-decoration:underline}
+  .container{max-width:1240px;margin:0 auto;padding:22px 26px 60px}
+  .status-banner{max-width:1240px;margin:0 auto;padding:0 26px}
+  .status-banner .inner{margin-top:14px;padding:10px 16px;border-radius:10px;font-size:13px;background:#fff3cd;color:#7a5b00;border:1px solid #f4d9a8;display:none}
+  .status-banner .inner.err{background:var(--red-l);color:var(--red);border-color:#f3b9b9}
+  .status-banner .inner.show{display:block}
+  .tabs{display:flex;gap:8px;margin:-16px auto 0;max-width:1240px;padding:0 26px}
+  .tab{flex:0 0 auto;background:#fff;border:1px solid var(--line);border-bottom:none;
+    padding:12px 22px;border-radius:12px 12px 0 0;cursor:pointer;font-family:'Kanit',sans-serif;
+    font-weight:500;color:var(--muted);box-shadow:var(--shadow);transition:.15s}
+  .tab.active{color:var(--green-d);background:#fff;border-color:var(--green);border-bottom:3px solid var(--green);transform:translateY(1px)}
+  .tab:hover{color:var(--green)}
+  .panel{display:none;animation:fade .25s}
+  .panel.active{display:block}
+  @keyframes fade{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+  .controls{display:flex;flex-wrap:wrap;gap:14px;align-items:flex-end;background:var(--card);
+    padding:16px 18px;border-radius:12px;box-shadow:var(--shadow);margin-bottom:18px}
+  .ctrl{display:flex;flex-direction:column;gap:5px}
+  .ctrl label{font-size:12.5px;color:var(--muted);font-weight:600}
+  select,input[type=search]{font-family:inherit;font-size:14.5px;padding:9px 12px;border:1px solid var(--line);
+    border-radius:9px;background:#fff;color:var(--ink);min-width:180px;outline:none}
+  select:focus,input:focus{border-color:var(--green);box-shadow:0 0 0 3px var(--green-l)}
+  .src-note{font-size:12.5px;color:var(--muted);margin-left:auto;max-width:340px}
+  .kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:14px;margin-bottom:18px}
+  .kpi{background:var(--card);border-radius:12px;padding:16px 18px;box-shadow:var(--shadow);border-left:4px solid var(--green)}
+  .kpi .v{font-family:'Kanit',sans-serif;font-size:24px;font-weight:600;color:var(--green-d)}
+  .kpi .l{font-size:13px;color:var(--muted);margin-top:2px}
+  .kpi.hi{border-left-color:var(--red)} .kpi.hi .v{color:var(--red)}
+  .kpi.lo{border-left-color:#2563eb} .kpi.lo .v{color:#2563eb}
+  .kpi small{font-size:12px;color:var(--muted);font-weight:400;display:block}
+  .grid2{display:grid;grid-template-columns:minmax(0,1.15fr) minmax(0,1fr);gap:18px;align-items:start}
+  @media(max-width:900px){.grid2{grid-template-columns:1fr}}
+  .card{background:var(--card);border-radius:12px;padding:16px 18px;box-shadow:var(--shadow)}
+  .card h3{margin:0 0 12px;font-size:16px;color:var(--green-d)}
+  .chart-box{position:relative;height:440px}
+  table{width:100%;border-collapse:collapse;font-size:14px}
+  th,td{padding:9px 10px;text-align:left;border-bottom:1px solid var(--line)}
+  th{position:sticky;top:0;background:var(--green-l);color:var(--green-d);font-family:'Kanit',sans-serif;
+    font-weight:500;font-size:13px;cursor:pointer;white-space:nowrap}
+  th:hover{background:var(--green-l2)}
+  td.num{text-align:right;font-variant-numeric:tabular-nums}
+  tbody tr:hover{background:var(--green-l)}
+  .tbl-scroll{max-height:520px;overflow:auto;border-radius:8px}
+  .chip{display:inline-block;padding:2px 9px;border-radius:20px;font-size:12px;font-weight:600}
+  .up{background:var(--red-l);color:var(--red)} .down{background:var(--green-l);color:var(--green-d)} .flat{background:#f1f2f4;color:var(--muted)}
+  .cat-badge{font-size:11.5px;color:var(--muted)}
+  /* warning */
+  .weather{background:linear-gradient(135deg,var(--amber-l),#fff);border:1px solid #f4d9a8;border-radius:12px;
+    padding:14px 18px;margin-bottom:18px;display:flex;gap:12px;align-items:center}
+  .weather .ico{font-size:30px}
+  .weather b{color:var(--amber)}
+  .crop-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(340px,1fr));gap:16px}
+  .crop-card{background:var(--card);border-radius:12px;box-shadow:var(--shadow);overflow:hidden;border-top:4px solid var(--green)}
+  .crop-card .head{padding:14px 16px;background:var(--green-l);display:flex;justify-content:space-between;align-items:center;gap:8px}
+  .crop-card .head h3{margin:0;font-size:17px;color:var(--green-d)}
+  .crop-card .stage{font-size:12px;color:var(--muted);background:#fff;padding:3px 10px;border-radius:20px;white-space:nowrap}
+  .crop-card .body{padding:6px 16px 14px}
+  .threat{padding:12px 0;border-bottom:1px dashed var(--line)}
+  .threat:last-child{border-bottom:none}
+  .threat .tname{font-family:'Kanit',sans-serif;font-weight:500;color:var(--red);font-size:14.5px;display:flex;gap:6px;align-items:center}
+  .threat .tname .dot{width:8px;height:8px;border-radius:50%;background:var(--red);flex:0 0 auto}
+  .threat .lab{font-size:12px;color:var(--amber);font-weight:700;margin-top:8px;text-transform:uppercase;letter-spacing:.3px}
+  .threat p{margin:3px 0 0;font-size:13.5px;color:#374151}
+  .count-pill{background:var(--green);color:#fff;font-size:12px;padding:2px 9px;border-radius:20px;font-weight:600}
+  footer{max-width:1240px;margin:0 auto;padding:0 26px 40px;color:var(--muted);font-size:13px}
+  .empty{padding:40px;text-align:center;color:var(--muted)}
+  .legend-note{font-size:12px;color:var(--muted);margin-top:8px}
+</style>
+</head>
+<body>
+<header>
+  <div class="wrap">
+    <h1>🌱 แดชบอร์ดราคาพืชและเตือนภัยการผลิตทางการเกษตร</h1>
+    <p>ราคาจาก 3 แหล่ง (สศก. / ตลาดไทย / กรมการค้าภายใน) และคำเตือนภัยการผลิตพืชจากกรมวิชาการเกษตร
+       · <b>ตลาดไทย, สี่มุมเมือง และเตือนภัยฯ เชื่อมสด</b> จาก Google Sheets ที่ n8n เขียนเข้าทุกสัปดาห์ ·
+       สศก. (OAE) ยังเป็นข้อมูลตัวอย่างแบบคงที่ (ยังไม่มี workflow เชื่อมต่อ)
+       · <span id="lastUpdate"></span></p>
+  </div>
+</header>
+
+<div class="status-banner"><div class="inner" id="loadStatus"></div></div>
+
+<div class="tabs">
+  <button class="tab active" data-tab="price">📊 ราคาพืชทุกชนิด</button>
+  <button class="tab" data-tab="warn">⚠️ เตือนภัยการผลิต</button>
+</div>
+
+<div class="container">
+
+  <!-- ============ PRICE PANEL ============ -->
+  <section id="panel-price" class="panel active">
+    <div class="controls">
+      <div class="ctrl">
+        <label for="fSource">แหล่งราคา</label>
+        <select id="fSource"></select>
+      </div>
+      <div class="ctrl">
+        <label for="fPeriod">ช่วงข้อมูล (สัปดาห์)</label>
+        <select id="fPeriod"></select>
+      </div>
+      <div class="ctrl">
+        <label for="fCat">หมวดพืช</label>
+        <select id="fCat"></select>
+      </div>
+      <div class="ctrl">
+        <label for="fSearch">ค้นหาชนิดพืช</label>
+        <input type="search" id="fSearch" placeholder="พิมพ์ชื่อพืช เช่น ทุเรียน, คะน้า...">
+      </div>
+      <div class="src-note" id="srcNote"></div>
+    </div>
+
+    <div class="kpis" id="kpis"></div>
+
+    <div class="grid2">
+      <div class="card">
+        <h3 id="chartTitle">ราคาต่อกิโลกรัม (โดยประมาณ)</h3>
+        <div class="chart-box"><canvas id="priceChart"></canvas></div>
+        <div class="legend-note" id="chartNote"></div>
+      </div>
+      <div class="card">
+        <h3>ตารางราคา <span id="rowCount" class="count-pill"></span></h3>
+        <div class="tbl-scroll">
+          <table id="priceTable">
+            <thead id="priceThead"></thead>
+            <tbody id="priceTbody"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ WARNING PANEL ============ -->
+  <section id="panel-warn" class="panel">
+    <div class="controls">
+      <div class="ctrl">
+        <label for="wPeriod">ช่วงข้อมูล</label>
+        <select id="wPeriod"></select>
+      </div>
+      <div class="ctrl">
+        <label for="wCrop">เลือกพืช</label>
+        <select id="wCrop"></select>
+      </div>
+      <div class="src-note">ที่มา: คณะทำงานพยากรณ์และเตือนภัยศัตรูพืช กรมวิชาการเกษตร (at.doa.go.th/ew)</div>
+    </div>
+    <div class="weather" id="weatherBox"></div>
+    <div class="crop-grid" id="cropGrid"></div>
+  </section>
+
+</div>
+
+<footer>
+  <p>💡 <b>การอัปเดต:</b> ตลาดไทย, สี่มุมเมือง และเตือนภัยฯ ดึงข้อมูลสดจาก Google Sheets ที่ workflow n8n เขียนแท็บใหม่เข้าไปทุกสัปดาห์ — เปิดหน้านี้ใหม่ก็จะเห็นสัปดาห์ล่าสุดโดยอัตโนมัติ ไม่ต้องแก้โค้ด
+     ส่วนข้อมูล สศก. (OAE) ยังไม่มี workflow เชื่อมต่อในรอบนี้ จึงยังคงเป็นชุดข้อมูลตัวอย่างที่ฝังไว้ในไฟล์ (ตัวแปร <code>DATA.price.oae</code>) เหมือนเดิม</p>
+</footer>
+
+<script>
+/* =========================================================================
+   ข้อมูลราคา สศก. (OAE) — ยังไม่มี workflow เชื่อมต่อ จึงคงเป็นข้อมูลตัวอย่างฝังไว้
+   ส่วนตลาดไทย / สี่มุมเมือง / เตือนภัยฯ ด้านล่างเป็นข้อมูลตัวอย่างเช่นกัน แต่จะถูก "เขียนทับ"
+   ด้วยข้อมูลสดจาก Google Sheets ทันทีที่โหลดสำเร็จ (ดูฟังก์ชัน loadTalaadThai / loadSiMumMuang /
+   loadDoaWarning และ main() ท้ายไฟล์) — ถ้าโหลดไม่สำเร็จ จะยังเห็นชุดตัวอย่างนี้แทน
+   ========================================================================= */
+const DATA = {
+  meta:{ generated:"2026-07-28" },
+
+  price:{
+    /* -------- แหล่ง 1: สำนักงานเศรษฐกิจการเกษตร (OAE) -------- */
+    oae:{
+      label:"สำนักงานเศรษฐกิจการเกษตร (สศก.)",
+      note:"ราคาที่เกษตรกรขายได้ที่ไร่–นา เฉลี่ยระดับประเทศ (รายสัปดาห์). ตัวเลขคือค่าเฉลี่ยของเดือน. หน่วยแตกต่างกันตามชนิดสินค้า.",
+      type:"oae",
+      weeks:{
+        "2026-07-24":[
+          // product, group, unit, weekly[], avg
+          ["ข้าวเปลือกเจ้าหอมมะลิ","ข้าว/ธัญพืช","บาท/ตัน",[16443,16430,16428],16434],
+          ["ข้าวเหนียวนาปียาว","ข้าว/ธัญพืช","บาท/ตัน",[11743,11646,11759],11716],
+          ["ข้าวเปลือกเจ้า ความชื้น 15%","ข้าว/ธัญพืช","บาท/ตัน",[8189,8358,8324],8290],
+          ["ข้าวโพดเลี้ยงสัตว์ ความชื้น 14.5%","ข้าว/ธัญพืช","บาท/กก.",[8.66,8.55,8.55],8.59],
+          ["มันสำปะหลังสด","พืชไร่","บาท/กก.",[2.79,2.83,2.96],2.86],
+          ["มันเส้น","พืชไร่","บาท/กก.",[5.62,5.73,5.61],5.65],
+          ["สับปะรดปัตตาเวีย (ส่งโรงงาน)","พืชไร่","บาท/กก.",[8.28,8.73,8.83],8.61],
+          ["ผลปาล์มน้ำมันทั้งทะลายคละ","พืชน้ำมัน","บาท/กก.",[8.01,8.09,8.60],8.23],
+          ["มะพร้าวแห้งใหญ่","พืชน้ำมัน","บาท/100 ผล",[607,601,610],606],
+          ["ยางแผ่นดิบ ชั้น 3","ยางพารา","บาท/กก.",[79.58,82.02,81.88],81.16],
+          ["น้ำยางสด","ยางพารา","บาท/กก.",[72.22,74.21,73.84],73.42],
+          ["ยางก้อน","ยางพารา","บาท/กก.",[36.19,36.96,37.05],36.73],
+          ["เศษยาง","ยางพารา","บาท/กก.",[33.11,34.01,34.65],33.92],
+          ["ทุเรียนหมอนทอง","ไม้ผล","บาท/กก.",[74.66,73.52,78.58],75.59],
+          ["มังคุด","ไม้ผล","บาท/กก.",[23.88,22.40,23.30],23.19],
+          ["เงาะโรงเรียน","ไม้ผล","บาท/กก.",[22.93,24.72,29.09],25.58],
+          ["ลำไยสดทั้งช่อ อีดอ เกรด AA","ไม้ผล","บาท/กก.",[34.16,29.66,27.89],30.57],
+          ["ลำไยสดทั้งช่อ อีดอ เกรด A","ไม้ผล","บาท/กก.",[29.04,27.03,25.36],27.14],
+          ["ลองกอง เบอร์ 1","ไม้ผล","บาท/กก.",[45.72,46.48,48.50],46.90],
+          ["พริกไทยดำ คละ","เครื่องเทศ","บาท/กก.",[350.07,350.07,350.06],350.07],
+          ["โคพันธุ์ลูกผสม ขนาดกลาง","ปศุสัตว์และประมง","บาท/ตัว",[20684,20709,20499],20631],
+          ["กระบือ ขนาดกลาง","ปศุสัตว์และประมง","บาท/ตัว",[27303,27408,27314],27342],
+          ["สุกร น้ำหนักเกิน 100 กก.","ปศุสัตว์และประมง","บาท/กก.",[66.14,65.62,66.30],66.02],
+          ["ไก่รุ่นพันธุ์เนื้อ (ฟาร์มอิสระ)","ปศุสัตว์และประมง","บาท/กก.",[40.22,40.28,40.22],40.24],
+          ["ไข่ไก่สด คละ","ปศุสัตว์และประมง","บาท/100 ฟอง",[365,366,368],367],
+          ["ไข่ไก่สด เบอร์ 3","ปศุสัตว์และประมง","บาท/100 ฟอง",[368,369,370],369],
+          ["กุ้งขาวแวนนาไม (70 ตัว/กก.)","ปศุสัตว์และประมง","บาท/กก.",[125,129,138],131],
+          ["น้ำนมดิบ","ปศุสัตว์และประมง","บาท/กก.",[21.28,21.39,21.37],21.35]
+        ]
+      }
+    },
+
+    /* -------- แหล่ง 2: ตลาดไทย (จะถูกแทนที่ด้วยข้อมูลสดจาก loadTalaadThai) -------- */
+    talaadthai:{
+      label:"ตลาดไทย",
+      note:"ราคาขายส่งรายวันที่ตลาดไทย (ผัก/สมุนไพร และผลไม้). ตัวเลขเป็นราคาต่ำสุด–สูงสุด และ % เปลี่ยนแปลงจากช่วงก่อน.",
+      type:"talaadthai",
+      weeks:{
+        "2026-07-27":[
+          // product, group, unit, min, max, change%, market
+          ["มะนาวเบอร์ 400/กระสอบ","ผักและสมุนไพร","กระสอบ",350,500,0,"ตลาดผักและสมุนไพร 1"],
+          ["ทุเรียนหมอนทอง เบอร์ใหญ่","ผลไม้","กก.",90,100,0,"ตลาดผลไม้ฤดูกาล"]
+        ]
+      }
+    },
+
+    /* -------- แหล่ง 3: กรมการค้าภายใน (ตลาดสี่มุมเมือง) (จะถูกแทนที่ด้วยข้อมูลสดจาก loadSiMumMuang) -------- */
+    simummuang:{
+      label:"กรมการค้าภายใน (ตลาดสี่มุมเมือง)",
+      note:"ราคาขายส่งออนไลน์ (simummuangonline.com). แสดง 'ล็อตที่ซื้อขายมากที่สุด' ต่อชนิดพืช (จำนวนผู้ขายสูงสุด) พร้อมช่วงราคา ต่ำ/กลาง/สูง.",
+      type:"simummuang",
+      weeks:{
+        "2026-07-27":[
+          // product, group(category), unit, min, median, max, sellers
+          ["กะหล่ำดาว","กะหล่ำปลี","1 กก./ถุง",100,105,110,2],
+          ["คะน้าต้น","คะน้า","5 กก./ถุง",100,150,280,40]
+        ]
+      }
+    }
+  },
+
+  /* -------- เตือนภัยการผลิต (กรมวิชาการเกษตร) (จะถูกแทนที่ด้วยข้อมูลสดจาก loadDoaWarning) -------- */
+  warning:{
+    "2026-07-22_to_2026-08-04":{
+      label:"22 ก.ค. – 4 ส.ค. 2569",
+      weather:"ตัวอย่าง: ยังไม่ได้โหลดข้อมูลสดจากกรมวิชาการเกษตร",
+      crops:[
+        {crop:"กระเจี๊ยบเขียว", stage:"ทุกระยะการเจริญเติบโต", threats:[
+          {name:"แมลงหวี่ขาวยาสูบ", symptom:"ตัวอ่อนและตัวเต็มวัยดูดกินน้ำเลี้ยงบริเวณใบ และเป็นพาหะนำโรคที่เกิดจากเชื้อไวรัส", prevention:"พ่นสารเมื่อพบการระบาด เช่น บูโพรเฟซิน 25% WP (40 ก./น้ำ 20 ล.) หรือ อิมิดาโคลพริด 10% SL (20 มล./น้ำ 20 ล.)"}
+        ]}
+      ]
+    }
+  }
+};
+
+/* ========================= LIVE DATA LOADERS =========================
+   Each n8n workflow writes into ONE persistent spreadsheet with a new tab
+   per week. We fetch the whole workbook as XLSX, read every tab, and turn
+   each tab's rows into the exact row-array shape normalize() already
+   expects below — so none of the existing render/table/chart code needs
+   to change.
+   ======================================================================= */
+const TALAADTHAI_SHEET_ID  = '14vtCJQdoTgCs26IY2P__J4q4BspuXSvU3wRZia-PUiA';
+const SIMUMMUANG_SHEET_ID  = '1Y-DNR02bokbBCXTYZtvrxTZladDwx3ehpDxONz4iI18';
+const DOA_WARNING_SHEET_ID = '14xIx7WtckHYJj8HFDtMBGggt_RLXGtXh1msPMam0bz8';
+const xlsxUrl = id => `https://docs.google.com/spreadsheets/d/${id}/export?format=xlsx`;
+
+function num(v){ const n = parseFloat(v); return isNaN(n) ? 0 : n; }
+
+async function fetchWorkbook(sheetId){
+  // cache:'no-store' + timestamp param: always get the latest sheet, never a stale
+  // cached copy from a previous visit (same fix used on the competitor dashboard).
+  const res = await fetch(`${xlsxUrl(sheetId)}&_=${Date.now()}`, { cache: 'no-store' });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  return XLSX.read(await res.arrayBuffer(), { type: 'array' });
+}
+
+async function loadTalaadThai(){
+  const wb = await fetchWorkbook(TALAADTHAI_SHEET_ID);
+  const weeks = {};
+  wb.SheetNames.forEach(tabName => {
+    const tab = String(tabName).replace(/^=/, '');
+    const rows = XLSX.utils.sheet_to_json(wb.Sheets[tabName], { defval: '' });
+    const arr = rows.filter(r => r['สินค้า']).map(r => [
+      String(r['สินค้า'] || ''),
+      String(r['ประเภท'] || ''),
+      String(r['หน่วย'] || ''),
+      num(r['ราคาต่ำสุด (บาท)']),
+      num(r['ราคาสูงสุด (บาท)']),
+      num(r['% เปลี่ยนแปลง']),
+      String(r['ตลาด'] || ''),
+    ]);
+    if (arr.length) weeks[tab] = arr;
+  });
+  return weeks;
+}
+
+async function loadSiMumMuang(){
+  const wb = await fetchWorkbook(SIMUMMUANG_SHEET_ID);
+  const weeks = {};
+  wb.SheetNames.forEach(tabName => {
+    const tab = String(tabName).replace(/^=/, '');
+    const rows = XLSX.utils.sheet_to_json(wb.Sheets[tabName], { defval: '' });
+    const arr = rows.filter(r => r['product']).map(r => [
+      String(r['product'] || ''),
+      String(r['category'] || ''),
+      String(r['unit'] || ''),
+      num(r['minPrice']),
+      num(r['medianPrice']),
+      num(r['maxPrice']),
+      num(r['sellers']),
+    ]);
+    if (arr.length) weeks[tab] = arr;
+  });
+  return weeks;
+}
+
+async function loadDoaWarning(){
+  const wb = await fetchWorkbook(DOA_WARNING_SHEET_ID);
+  const periods = {};
+  wb.SheetNames.forEach(tabName => {
+    const tab = String(tabName).replace(/^=/, '');
+    const rows = XLSX.utils.sheet_to_json(wb.Sheets[tabName], { defval: '' });
+    if (!rows.length) return;
+    const byPlant = {};
+    rows.forEach(r => {
+      const plant = String(r.plant_name || '').trim();
+      if (!plant) return;
+      if (!byPlant[plant]) {
+        byPlant[plant] = { crop: plant, stage: String(r.growth_stage || '').trim() || 'ไม่ระบุระยะ', threats: [] };
+      }
+      byPlant[plant].threats.push({
+        name: String(r.pest_name || '').trim() || '(ไม่ระบุชื่อ)',
+        symptom: String(r.symptom || '').trim(),
+        prevention: String(r.solution || '').trim(),
+      });
+    });
+    const crops = Object.values(byPlant);
+    if (!crops.length) return;
+    const first = rows[0];
+    periods[tab] = {
+      label: String(first.period || tab).trim(),
+      weather: `ช่วงข้อมูล ${first.start_date || ''} – ${first.end_date || ''} · พบพืชที่มีคำเตือน ${crops.length} ชนิด · รวม ${rows.length} รายการ`,
+      crops,
+    };
+  });
+  return periods;
+}
+
+/* ========================= LOGIC ========================= */
+const $ = id => document.getElementById(id);
+const fmt = n => (n===null||n===undefined||isNaN(n)) ? "-" :
+  Number(n).toLocaleString('th-TH',{maximumFractionDigits:2});
+
+/* ---- tabs ---- */
+document.querySelectorAll('.tab').forEach(t=>t.onclick=()=>{
+  document.querySelectorAll('.tab').forEach(x=>x.classList.remove('active'));
+  document.querySelectorAll('.panel').forEach(x=>x.classList.remove('active'));
+  t.classList.add('active');
+  $('panel-'+t.dataset.tab).classList.add('active');
+});
+
+/* ---- normalize rows per source into common objects with perKg ---- */
+function normalize(srcKey, week){
+  const src = DATA.price[srcKey];
+  const rows = (src.weeks[week]||[]);
+  return rows.map(r=>{
+    if(src.type==="oae"){
+      const [product,group,unit,weekly,avg]=r;
+      return {product,group,unit,rep:avg,low:Math.min(...weekly),high:Math.max(...weekly),
+        perKg: unit==="บาท/กก."? avg : null, extra:null};
+    }
+    if(src.type==="talaadthai"){
+      const [product,group,unit,min,max,chg,market]=r;
+      const mid=(min+max)/2;
+      return {product,group,unit:unit+" (ต่ำ–สูง)",rep:mid,low:min,high:max,
+        perKg: unit==="กก."? mid : null, change:chg, market, extra:market};
+    }
+    if(src.type==="simummuang"){
+      const [product,group,unit,min,med,max,sellers]=r;
+      // per-kg estimate when unit is "N กก./..."
+      let perKg=null; const m=unit.match(/^([\d.]+)\s*กก\./); if(m) perKg=med/parseFloat(m[1]);
+      return {product,group,unit,rep:med,low:min,high:max,perKg,sellers,extra:sellers+" ผู้ขาย"};
+    }
+  });
+}
+
+/* ---- price panel state & render ---- */
+let sortState={key:'rep',dir:-1};
+let chart=null;
+
+function initPrice(){
+  const sel=$('fSource'); sel.innerHTML='';
+  Object.keys(DATA.price).forEach(k=>{
+    const o=document.createElement('option'); o.value=k; o.textContent=DATA.price[k].label; sel.appendChild(o);
+  });
+  sel.onchange=()=>{fillPeriods();renderPrice();};
+  $('fPeriod').onchange=renderPrice;
+  $('fCat').onchange=renderPrice;
+  $('fSearch').oninput=renderPrice;
+  fillPeriods(); renderPrice();
+}
+function fillPeriods(){
+  const src=DATA.price[$('fSource').value];
+  const ps=Object.keys(src.weeks).sort().reverse();
+  const sel=$('fPeriod'); sel.innerHTML='';
+  ps.forEach(p=>{const o=document.createElement('option');o.value=p;o.textContent=p;sel.appendChild(o);});
+  // categories
+  fillCats();
+}
+function fillCats(){
+  const rows=normalize($('fSource').value,$('fPeriod').value);
+  const cats=[...new Set(rows.map(r=>r.group))];
+  const sel=$('fCat'); sel.innerHTML='<option value="__all">ทั้งหมด</option>';
+  cats.forEach(c=>{const o=document.createElement('option');o.value=c;o.textContent=c;sel.appendChild(o);});
+}
+function currentRows(){
+  let rows=normalize($('fSource').value,$('fPeriod').value);
+  const cat=$('fCat').value, q=$('fSearch').value.trim();
+  if(cat && cat!=="__all") rows=rows.filter(r=>r.group===cat);
+  if(q) rows=rows.filter(r=>r.product.includes(q));
+  rows.sort((a,b)=>{
+    let x=a[sortState.key],y=b[sortState.key];
+    if(typeof x==="string"){return sortState.dir*x.localeCompare(y,'th');}
+    x=x??-Infinity;y=y??-Infinity; return sortState.dir*(x-y);
+  });
+  return rows;
+}
+
+function renderPrice(){
+  const srcKey=$('fSource').value, src=DATA.price[srcKey];
+  $('srcNote').textContent=src.note;
+  fillCats && (function(){ // keep category list in sync w/ period but preserve selection
+    const prev=$('fCat').value; fillCats();
+    if([...$('fCat').options].some(o=>o.value===prev)) $('fCat').value=prev;
+  })();
+  const rows=currentRows();
+  $('rowCount').textContent=rows.length+" รายการ";
+
+  // KPIs (per-kg subset for price stats)
+  const kg=rows.filter(r=>r.perKg!=null);
+  const kgVals=kg.map(r=>r.perKg);
+  const avg=kgVals.length? kgVals.reduce((a,b)=>a+b,0)/kgVals.length : null;
+  let hi=null,lo=null;
+  if(kg.length){hi=kg.reduce((a,b)=>a.perKg>b.perKg?a:b);lo=kg.reduce((a,b)=>a.perKg<b.perKg?a:b);}
+  $('kpis').innerHTML=`
+    <div class="kpi"><div class="v">${rows.length}</div><div class="l">ชนิดพืช/สินค้าที่แสดง</div></div>
+    <div class="kpi"><div class="v">${avg!=null?fmt(avg):'-'}<small>บาท/กก. (เฉลี่ยเฉพาะสินค้าหน่วย กก.)</small></div><div class="l">ราคาเฉลี่ยต่อกิโลกรัม</div></div>
+    <div class="kpi hi"><div class="v">${hi?fmt(hi.perKg):'-'}<small>${hi?hi.product:''}</small></div><div class="l">แพงสุด (บาท/กก.)</div></div>
+    <div class="kpi lo"><div class="v">${lo?fmt(lo.perKg):'-'}<small>${lo?lo.product:''}</small></div><div class="l">ถูกสุด (บาท/กก.)</div></div>`;
+
+  renderTable(rows,src.type);
+  renderChart(rows,src.type);
+}
+
+function renderTable(rows,type){
+  const thead=$('priceThead'), tbody=$('priceTbody');
+  let cols;
+  if(type==="oae") cols=[['product','ชนิดพืช/สินค้า'],['group','หมวด'],['unit','หน่วย'],['low','ต่ำสุด'],['rep','เฉลี่ย'],['high','สูงสุด']];
+  else if(type==="talaadthai") cols=[['product','สินค้า'],['group','หมวด'],['low','ราคาต่ำสุด'],['high','ราคาสูงสุด'],['change','%เปลี่ยน'],['market','ตลาด']];
+  else cols=[['product','สินค้า'],['group','หมวด'],['unit','หน่วย'],['low','ต่ำ'],['rep','กลาง'],['high','สูง'],['sellers','ผู้ขาย']];
+  thead.innerHTML='<tr>'+cols.map(c=>`<th data-k="${c[0]}">${c[1]}</th>`).join('')+'</tr>';
+  thead.querySelectorAll('th').forEach(th=>th.onclick=()=>{
+    const k=th.dataset.k; sortState.dir = (sortState.key===k? -sortState.dir : -1); sortState.key=k; renderPrice();
+  });
+  tbody.innerHTML = rows.length? rows.map(r=>{
+    return '<tr>'+cols.map(c=>{
+      const k=c[0]; let v=r[k];
+      if(k==='product') return `<td>${v}</td>`;
+      if(k==='group') return `<td class="cat-badge">${v}</td>`;
+      if(k==='market') return `<td>${v||'-'}</td>`;
+      if(k==='unit') return `<td>${v}</td>`;
+      if(k==='change'){
+        const cls=v>0?'up':v<0?'down':'flat'; const s=v>0?'▲':v<0?'▼':'—';
+        return `<td class="num"><span class="chip ${cls}">${s} ${fmt(Math.abs(v))}%</span></td>`;
+      }
+      return `<td class="num">${fmt(v)}</td>`;
+    }).join('')+'</tr>';
+  }).join('') : `<tr><td colspan="${cols.length}" class="empty">ไม่พบข้อมูลตามเงื่อนไข</td></tr>`;
+}
+
+function renderChart(rows,type){
+  const kg=rows.filter(r=>r.perKg!=null).sort((a,b)=>b.perKg-a.perKg);
+  let useKg=kg.length>=Math.max(3,rows.length*0.4);
+  let data = useKg? kg : rows.slice().sort((a,b)=>b.rep-a.rep);
+  data=data.slice(0,25);
+  $('chartTitle').textContent = useKg? "ราคาต่อกิโลกรัม (โดยประมาณ) — เรียงมาก→น้อย" : "ราคา (ตามหน่วยของแต่ละสินค้า)";
+  $('chartNote').textContent = useKg
+    ? "* แท่งกราฟคือราคาต่อกิโลกรัมโดยประมาณ เพื่อให้เปรียบเทียบข้ามสินค้าได้ (สินค้าหน่วยอื่น เช่น กระสอบ/หวี ไม่แสดงในกราฟ)"
+    : "* หน่วยแตกต่างกันตามสินค้า ควรดูรายละเอียดในตารางประกอบ";
+  const labels=data.map(r=>r.product);
+  const vals=data.map(r=>useKg?r.perKg:r.rep);
+  if(chart) chart.destroy();
+  chart=new Chart($('priceChart'),{
+    type:'bar',
+    data:{labels,datasets:[{label:useKg?'บาท/กก.':'ราคา',data:vals,
+      backgroundColor:'rgba(31,122,61,.78)',borderColor:'#155a2c',borderWidth:1,borderRadius:4}]},
+    options:{indexAxis:'y',responsive:true,maintainAspectRatio:false,
+      plugins:{legend:{display:false},
+        tooltip:{callbacks:{label:c=>{
+          const r=data[c.dataIndex];
+          let s=' '+fmt(c.parsed.x)+(useKg?' บาท/กก.':' ('+r.unit+')');
+          if(r.extra) s+=' · '+r.extra;
+          return s;
+        }}}},
+      scales:{x:{beginAtZero:true,ticks:{callback:v=>fmt(v)}},y:{ticks:{font:{size:11}}}}}
+  });
+}
+
+/* ---- warning panel ---- */
+function initWarn(){
+  const sel=$('wPeriod'); sel.innerHTML='';
+  Object.keys(DATA.warning).sort().reverse().forEach(k=>{
+    const o=document.createElement('option');o.value=k;o.textContent=DATA.warning[k].label;sel.appendChild(o);
+  });
+  sel.onchange=()=>{fillCrops();renderWarn();};
+  $('wCrop').onchange=renderWarn;
+  fillCrops(); renderWarn();
+}
+function fillCrops(){
+  const w=DATA.warning[$('wPeriod').value];
+  const sel=$('wCrop'); sel.innerHTML='<option value="__all">ทุกพืช</option>';
+  w.crops.forEach(c=>{const o=document.createElement('option');o.value=c.crop;o.textContent=c.crop;sel.appendChild(o);});
+}
+function renderWarn(){
+  const w=DATA.warning[$('wPeriod').value];
+  $('weatherBox').innerHTML=`<div class="ico">⚠️</div><div><b>สรุปช่วงนี้:</b> ${w.weather}</div>`;
+  const pick=$('wCrop').value;
+  const crops = pick==="__all"? w.crops : w.crops.filter(c=>c.crop===pick);
+  $('cropGrid').innerHTML = crops.map(c=>`
+    <div class="crop-card">
+      <div class="head"><h3>🌿 ${c.crop}</h3><span class="stage">ระยะ: ${c.stage}</span></div>
+      <div class="body">
+        ${c.threats.map(t=>`
+          <div class="threat">
+            <div class="tname"><span class="dot"></span>${t.name}</div>
+            <div class="lab">อาการ / ลักษณะ</div><p>${t.symptom||'-'}</p>
+            <div class="lab">แนวทางป้องกัน–แก้ไข</div><p>${t.prevention||'-'}</p>
+          </div>`).join('')}
+      </div>
+    </div>`).join('');
+}
+
+/* ========================= BOOTSTRAP ========================= */
+async function main(){
+  const statusEl = $('loadStatus');
+  const setStatus = (msg, isErr) => {
+    statusEl.textContent = msg;
+    statusEl.classList.toggle('show', !!msg);
+    statusEl.classList.toggle('err', !!isErr);
+  };
+  $('lastUpdate').textContent = 'กำลังโหลดข้อมูลล่าสุดจาก Google Sheets...';
+
+  const results = await Promise.allSettled([
+    loadTalaadThai().then(w => { if (Object.keys(w).length) DATA.price.talaadthai.weeks = w; }),
+    loadSiMumMuang().then(w => { if (Object.keys(w).length) DATA.price.simummuang.weeks = w; }),
+    loadDoaWarning().then(p => { if (Object.keys(p).length) DATA.warning = p; }),
+  ]);
+
+  const failed = results.filter(r => r.status === 'rejected');
+  if (failed.length) {
+    failed.forEach(f => console.error('[sheet load failed]', f.reason));
+    setStatus(
+      `โหลดข้อมูลสดไม่สำเร็จ (${failed.length}/3 แหล่ง) — กำลังแสดงข้อมูลตัวอย่างแทนสำหรับส่วนนั้น ` +
+      `ตรวจสอบว่า: 1) ชีตที่เกี่ยวข้องแชร์เป็น "Anyone with the link" และ 2) หน้านี้เปิดผ่าน http(s) ` +
+      `(ไม่ใช่ไฟล์ file:// ในเครื่อง) — ดู Console (F12) สำหรับรายละเอียด error`,
+      true
+    );
+    $('lastUpdate').textContent = 'โหลดข้อมูลบางส่วนไม่สำเร็จ — ดูรายละเอียดด้านบน';
+  } else {
+    setStatus('', false);
+    $('lastUpdate').textContent = 'อัปเดตข้อมูลล่าสุด: ' + new Date().toLocaleString('th-TH', { timeZone: 'Asia/Bangkok' });
+  }
+
+  initPrice();
+  initWarn();
+}
+main();
+</script>
+</body>
+</html>
