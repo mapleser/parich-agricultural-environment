@@ -52,9 +52,9 @@
   .kpi.hi{border-left-color:var(--red)} .kpi.hi .v{color:var(--red)}
   .kpi.lo{border-left-color:#2563eb} .kpi.lo .v{color:#2563eb}
   .kpi small{font-size:12px;color:var(--muted);font-weight:400;display:block}
-  .kpi.wow-head{border-left-color:#7c6cf2}
-  .kpi.wow-head .v{color:#7c6cf2}
-  .section-title{font-size:12.5px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.09em;margin:2px 0 -4px}
+  .kpi.wow-head{border-left-color:var(--green)}
+  .kpi.wow-head .v{color:var(--green-d)}
+  .section-title{font-size:12.5px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.09em;margin:6px 0 12px;line-height:1.4}
   .grid2{display:grid;grid-template-columns:minmax(0,1.15fr) minmax(0,1fr);gap:18px;align-items:start}
   @media(max-width:900px){.grid2{grid-template-columns:1fr}}
   .card{background:var(--card);border-radius:12px;padding:16px 18px;box-shadow:var(--shadow)}
@@ -440,6 +440,26 @@ function normalize(srcKey, week){
   });
 }
 
+/* ---- period ordering: newest first ----
+   Google Sheet tab names are normally clean "YYYY-MM-DD" strings, but a tab can end up
+   renamed (e.g. "old 2026-08-10" kept around for reference) which plain string sort gets
+   wrong (letters sort after digits, so "old ..." lands ahead of a newer plain date). This
+   pulls the embedded YYYY-MM-DD out of each key and sorts by that date, newest first, so
+   renamed/annotated tabs still land in the right place instead of derailing the order. ---- */
+function periodDateKey(p){
+  const m = String(p).match(/(\d{4})-(\d{2})-(\d{2})/);
+  return m ? m[0] : null;
+}
+function sortPeriodsDesc(keys){
+  return keys.slice().sort((a,b)=>{
+    const da=periodDateKey(a), db=periodDateKey(b);
+    if(da && db && da!==db) return db.localeCompare(da);
+    if(da && !db) return -1;
+    if(!da && db) return 1;
+    return String(b).localeCompare(String(a));
+  });
+}
+
 /* ---- price panel state & render ---- */
 let sortState={key:'rep',dir:-1};
 let chart=null;
@@ -457,7 +477,7 @@ function initPrice(){
 }
 function fillPeriods(){
   const src=DATA.price[$('fSource').value];
-  const ps=Object.keys(src.weeks).sort().reverse();
+  const ps=sortPeriodsDesc(Object.keys(src.weeks));
   const sel=$('fPeriod'); sel.innerHTML='';
   ps.forEach(p=>{const o=document.createElement('option');o.value=p;o.textContent=p;sel.appendChild(o);});
   // categories
@@ -519,7 +539,7 @@ function renderPrice(){
    ค่าสถิติเดียวกับที่ KPI แถวบนคำนวณอยู่แล้ว (จำนวนรายการ, ราคาเฉลี่ยต่อกก.) ผูกกับ
    ตัวกรองหมวดพืช/คำค้นหาปัจจุบันด้วย เพื่อให้เทียบพืชกลุ่มเดียวกันจริง ๆ ---- */
 function sortedPeriods(srcKey){
-  return Object.keys(DATA.price[srcKey].weeks).sort().reverse();
+  return sortPeriodsDesc(Object.keys(DATA.price[srcKey].weeks));
 }
 function getPreviousPeriod(srcKey, period){
   const ps = sortedPeriods(srcKey);
@@ -627,7 +647,7 @@ function renderChart(rows,type){
 /* ---- warning panel ---- */
 function initWarn(){
   const sel=$('wPeriod'); sel.innerHTML='';
-  Object.keys(DATA.warning).sort().reverse().forEach(k=>{
+  sortPeriodsDesc(Object.keys(DATA.warning)).forEach(k=>{
     const o=document.createElement('option');o.value=k;o.textContent=DATA.warning[k].label;sel.appendChild(o);
   });
   sel.onchange=()=>{fillCrops();renderWarn();};
