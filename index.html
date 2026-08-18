@@ -99,8 +99,7 @@
   <div class="wrap">
     <h1>🌱 แดชบอร์ดราคาพืชและเตือนภัยการผลิตทางการเกษตร</h1>
     <p>ราคาจาก 3 แหล่ง (สศก. / ตลาดไทย / กรมการค้าภายใน) และคำเตือนภัยการผลิตพืชจากกรมวิชาการเกษตร
-       · <b>ตลาดไทย, สี่มุมเมือง และเตือนภัยฯ เชื่อมสด</b> จาก Google Sheets ที่ n8n เขียนเข้าทุกสัปดาห์ ·
-       สศก. (OAE) ยังเป็นข้อมูลตัวอย่างแบบคงที่ (ยังไม่มี workflow เชื่อมต่อ)
+       · <b>ทั้ง 4 แหล่งเชื่อมสด</b> จาก Google Sheets ที่ n8n เขียนเข้าทุกสัปดาห์
        · <span id="lastUpdate"></span></p>
   </div>
 </header>
@@ -179,16 +178,15 @@
 </div>
 
 <footer>
-  <p>💡 <b>การอัปเดต:</b> ตลาดไทย, สี่มุมเมือง และเตือนภัยฯ ดึงข้อมูลสดจาก Google Sheets ที่ workflow n8n เขียนแท็บใหม่เข้าไปทุกสัปดาห์ — เปิดหน้านี้ใหม่ก็จะเห็นสัปดาห์ล่าสุดโดยอัตโนมัติ ไม่ต้องแก้โค้ด
-     ส่วนข้อมูล สศก. (OAE) ยังไม่มี workflow เชื่อมต่อในรอบนี้ จึงยังคงเป็นชุดข้อมูลตัวอย่างที่ฝังไว้ในไฟล์ (ตัวแปร <code>DATA.price.oae</code>) เหมือนเดิม</p>
+  <p>💡 <b>การอัปเดต:</b> ทั้ง 4 แหล่ง (สศก., ตลาดไทย, สี่มุมเมือง, เตือนภัยฯ) ดึงข้อมูลสดจาก Google Sheets ที่ workflow n8n เขียนแท็บใหม่เข้าไปทุกสัปดาห์ — เปิดหน้านี้ใหม่ก็จะเห็นสัปดาห์ล่าสุดโดยอัตโนมัติ ไม่ต้องแก้โค้ด
+     หากโหลดจากชีตใดไม่สำเร็จชั่วคราว หน้านี้จะกลับไปแสดงชุดข้อมูลตัวอย่างของแหล่งนั้นแทนโดยอัตโนมัติ</p>
 </footer>
 
 <script>
 /* =========================================================================
-   ข้อมูลราคา สศก. (OAE) — ยังไม่มี workflow เชื่อมต่อ จึงคงเป็นข้อมูลตัวอย่างฝังไว้
-   ส่วนตลาดไทย / สี่มุมเมือง / เตือนภัยฯ ด้านล่างเป็นข้อมูลตัวอย่างเช่นกัน แต่จะถูก "เขียนทับ"
-   ด้วยข้อมูลสดจาก Google Sheets ทันทีที่โหลดสำเร็จ (ดูฟังก์ชัน loadTalaadThai / loadSiMumMuang /
-   loadDoaWarning และ main() ท้ายไฟล์) — ถ้าโหลดไม่สำเร็จ จะยังเห็นชุดตัวอย่างนี้แทน
+   ข้อมูลตัวอย่าง (fallback) สำหรับทั้ง 4 แหล่ง — ใช้แสดงผลตอนเพจเพิ่งโหลด หรือกรณีโหลด
+   จาก Google Sheets ไม่สำเร็จเท่านั้น ทุกแหล่งจะถูก "เขียนทับ" ด้วยข้อมูลสดทันทีที่โหลดสำเร็จ
+   (ดูฟังก์ชัน loadOae / loadTalaadThai / loadSiMumMuang / loadDoaWarning และ main() ท้ายไฟล์)
    ========================================================================= */
 const DATA = {
   meta:{ generated:"2026-07-28" },
@@ -287,6 +285,7 @@ const DATA = {
 const TALAADTHAI_SHEET_ID  = '14vtCJQdoTgCs26IY2P__J4q4BspuXSvU3wRZia-PUiA';
 const SIMUMMUANG_SHEET_ID  = '1Y-DNR02bokbBCXTYZtvrxTZladDwx3ehpDxONz4iI18';
 const DOA_WARNING_SHEET_ID = '14xIx7WtckHYJj8HFDtMBGggt_RLXGtXh1msPMam0bz8';
+const OAE_SHEET_ID         = '1Gz2pNyiOFFgYWXzQ2kUqdGlRID-Trvj8WCa2LZJfsiU';
 const xlsxUrl = id => `https://docs.google.com/spreadsheets/d/${id}/export?format=xlsx`;
 
 function num(v){ const n = parseFloat(v); return isNaN(n) ? 0 : n; }
@@ -369,6 +368,103 @@ async function loadDoaWarning(){
     };
   });
   return periods;
+}
+
+/* ---- OAE loader --------------------------------------------------------
+   The n8n workflow extracts OAE's weekly PDF report text line-by-line, so
+   the sheet only has raw columns (weekDate, sourcePdfUrl, lineNo, item,
+   numbers, rawLine) — no clean "group"/"unit" per product like the other
+   3 sources. OAE reports the same ~28-item commodity basket every week
+   though, so we classify by matching a short, corruption-resistant
+   substring of each known product name (PDF text extraction sometimes
+   drops spaces or turns 'ำ' into 'า', e.g. "มันสำปะหลัง" -> "มันสาปะหลัง"
+   — the match patterns below were chosen to survive that). Anything that
+   doesn't match falls back to an "ไม่ระบุหมวด" bucket rather than being
+   silently mis-tagged.
+
+   That only fixes CLASSIFICATION though — on its own it doesn't repair the
+   text actually shown on the dashboard, so a corrupted line would still
+   display as "มันสาปะหลังสด" in the table/chart. OAE_SPELL_FIX below patches
+   the specific corruption spots we know this extractor produces (all
+   around the ำ vowel losing its diacritic and collapsing to า) directly in
+   the item text before it's rendered — as a plain substring swap, not a
+   blanket "all า → ำ" pass, so words that correctly contain า everywhere
+   else, and suffixes like "เกรด AA" or "ความชื้น 15%", are left untouched.
+   If real data from the sheet turns up other misspellings, send an
+   example and another [bad, good] pair can be added here. ------------------------------------------------------------------------ */
+const OAE_SPELL_FIX = [
+  ['สาปะหลัง', 'สำปะหลัง'],   // มันสำปะหลัง
+  ['น้ายาง', 'น้ำยาง'],       // น้ำยางสด
+  ['น้านม', 'น้ำนม'],         // น้ำนมดิบ
+];
+function fixOaeSpelling(item){
+  let s = item;
+  OAE_SPELL_FIX.forEach(([bad, good]) => { s = s.split(bad).join(good); });
+  return s;
+}
+const OAE_CLASSIFY = [
+  ['หอมมะลิ',        'ข้าว/ธัญพืช',        'บาท/ตัน'],
+  ['เหนียวนาปี',      'ข้าว/ธัญพืช',        'บาท/ตัน'],
+  ['เปลือกเจ้า',      'ข้าว/ธัญพืช',        'บาท/ตัน'],
+  ['ข้าวโพด',         'ข้าว/ธัญพืช',        'บาท/กก.'],
+  ['ปะหลังสด',        'พืชไร่',            'บาท/กก.'],
+  ['มันเส้น',         'พืชไร่',            'บาท/กก.'],
+  ['สับปะรด',         'พืชไร่',            'บาท/กก.'],
+  ['ปาล์ม',           'พืชน้ำมัน',          'บาท/กก.'],
+  ['มะพร้าวแห้ง',      'พืชน้ำมัน',          'บาท/100 ผล'],
+  ['ยางแผ่นดิบ',       'ยางพารา',           'บาท/กก.'],
+  ['ยางสด',          'ยางพารา',           'บาท/กก.'],
+  ['ยางก้อน',         'ยางพารา',           'บาท/กก.'],
+  ['เศษยาง',          'ยางพารา',           'บาท/กก.'],
+  ['ทุเรียน',         'ไม้ผล',             'บาท/กก.'],
+  ['มังคุด',          'ไม้ผล',             'บาท/กก.'],
+  ['เงาะ',           'ไม้ผล',             'บาท/กก.'],
+  ['ลาไย',           'ไม้ผล',             'บาท/กก.'],
+  ['ลำไย',           'ไม้ผล',             'บาท/กก.'],
+  ['ลองกอง',         'ไม้ผล',             'บาท/กก.'],
+  ['พริกไทย',         'เครื่องเทศ',         'บาท/กก.'],
+  ['โคพันธุ์',        'ปศุสัตว์และประมง',    'บาท/ตัว'],
+  ['กระบือ',          'ปศุสัตว์และประมง',    'บาท/ตัว'],
+  ['สุกร',           'ปศุสัตว์และประมง',    'บาท/กก.'],
+  ['ไก่รุ่น',         'ปศุสัตว์และประมง',    'บาท/กก.'],
+  ['ไข่ไก่สด',        'ปศุสัตว์และประมง',    'บาท/100 ฟอง'],
+  ['กุ้งขาว',         'ปศุสัตว์และประมง',    'บาท/กก.'],
+  ['นมดิบ',          'ปศุสัตว์และประมง',    'บาท/กก.'],
+];
+function classifyOae(item){
+  for (const [pat, group, unit] of OAE_CLASSIFY) {
+    if (item.includes(pat)) return { group, unit };
+  }
+  return { group: 'ไม่ระบุหมวด', unit: '' };
+}
+function parseOaeNumbers(cell){
+  const all = String(cell || '').split('|').map(s => parseFloat(s.replace(/,/g, '').trim())).filter(n => !isNaN(n));
+  // The item/numbers split isn't always clean — a stray value from something like
+  // "ความชื้น 15%" sometimes leaks in as an extra leading number. Real weekly data
+  // is consistently the LAST 3 numbers on the line, so drop any earlier noise.
+  return all.length > 3 ? all.slice(-3) : all;
+}
+async function loadOae(){
+  const wb = await fetchWorkbook(OAE_SHEET_ID);
+  const weeks = {};
+  wb.SheetNames.forEach(tabName => {
+    const tab = String(tabName).replace(/^=/, '');
+    const rows = XLSX.utils.sheet_to_json(wb.Sheets[tabName], { defval: '' });
+    const arr = [];
+    rows.forEach(r => {
+      let item = String(r.item || '').trim();
+      if (!item) return;
+      if (item.includes('สัปดาห์ที่') || item.includes('ราคาที่เกษตรกร')) return; // PDF header/title lines, not data
+      const weekly = parseOaeNumbers(r.numbers);
+      if (!weekly.length) return;
+      item = fixOaeSpelling(item);
+      const { group, unit } = classifyOae(item);
+      const avg = Math.round((weekly.reduce((a,b)=>a+b,0) / weekly.length) * 100) / 100;
+      arr.push([item, group, unit, weekly, avg]);
+    });
+    if (arr.length) weeks[tab] = arr;
+  });
+  return weeks;
 }
 
 /* ========================= LOGIC ========================= */
@@ -689,6 +785,7 @@ async function main(){
   $('lastUpdate').textContent = 'กำลังโหลดข้อมูลล่าสุดจาก Google Sheets...';
 
   const results = await Promise.allSettled([
+    loadOae().then(w => { if (Object.keys(w).length) DATA.price.oae.weeks = w; }),
     loadTalaadThai().then(w => { if (Object.keys(w).length) DATA.price.talaadthai.weeks = w; }),
     loadSiMumMuang().then(w => { if (Object.keys(w).length) DATA.price.simummuang.weeks = w; }),
     loadDoaWarning().then(p => { if (Object.keys(p).length) DATA.warning = p; }),
@@ -698,7 +795,7 @@ async function main(){
   if (failed.length) {
     failed.forEach(f => console.error('[sheet load failed]', f.reason));
     setStatus(
-      `โหลดข้อมูลสดไม่สำเร็จ (${failed.length}/3 แหล่ง) — กำลังแสดงข้อมูลตัวอย่างแทนสำหรับส่วนนั้น ` +
+      `โหลดข้อมูลสดไม่สำเร็จ (${failed.length}/4 แหล่ง) — กำลังแสดงข้อมูลตัวอย่างแทนสำหรับส่วนนั้น ` +
       `ตรวจสอบว่า: 1) ชีตที่เกี่ยวข้องแชร์เป็น "Anyone with the link" และ 2) หน้านี้เปิดผ่าน http(s) ` +
       `(ไม่ใช่ไฟล์ file:// ในเครื่อง) — ดู Console (F12) สำหรับรายละเอียด error`,
       true
