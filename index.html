@@ -52,6 +52,9 @@
   .kpi.hi{border-left-color:var(--red)} .kpi.hi .v{color:var(--red)}
   .kpi.lo{border-left-color:#2563eb} .kpi.lo .v{color:#2563eb}
   .kpi small{font-size:12px;color:var(--muted);font-weight:400;display:block}
+  .kpi.wow-head{border-left-color:#7c6cf2}
+  .kpi.wow-head .v{color:#7c6cf2}
+  .section-title{font-size:12.5px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.09em;margin:2px 0 -4px}
   .grid2{display:grid;grid-template-columns:minmax(0,1.15fr) minmax(0,1fr);gap:18px;align-items:start}
   @media(max-width:900px){.grid2{grid-template-columns:1fr}}
   .card{background:var(--card);border-radius:12px;padding:16px 18px;box-shadow:var(--shadow)}
@@ -134,6 +137,9 @@
     </div>
 
     <div class="kpis" id="kpis"></div>
+
+    <div class="section-title">📊 เปรียบเทียบสัปดาห์ปัจจุบัน vs สัปดาห์ก่อนหน้า (Week over Week)</div>
+    <div class="kpis" id="priceWow"></div>
 
     <div class="grid2">
       <div class="card">
@@ -378,6 +384,37 @@ document.querySelectorAll('.tab').forEach(t=>t.onclick=()=>{
   $('panel-'+t.dataset.tab).classList.add('active');
 });
 
+/* ---- crop whitelist: only these crops are allowed to appear for ตลาดไทย / สี่มุมเมือง
+   (the two sources scraped by keyword/category match, which can otherwise pick up
+   unrelated branded products e.g. "ผงมะนาว ตรา คนอร์" or "มะเขือเทศเชอรี่"). This is a
+   client-side safety net matching the same whitelist already enforced in the n8n
+   workflows themselves — old rows written to the sheet before that fix was applied
+   will still be filtered out here. ---- */
+const CROP_WHITELIST = [
+  { match: 'สับปะรด' },
+  { match: 'ทุเรียน' },
+  { match: 'มะละกอ' },
+  { match: 'มะม่วง' },
+  { match: 'มะนาว' },
+  { match: 'มะพร้าว' },
+  { match: 'ผักกาด' },
+  { match: 'ผักบุ้ง' },
+  { match: 'คะน้า' },
+  { match: 'ผักชี' },
+  { match: 'พริก', exclude: ['พริกไทย'] },
+  { match: 'มะเขือ', exclude: ['มะเขือเทศ'] },
+  { match: 'กระเทียม' },
+  { match: 'หอม', exclude: ['หอมมะลิ'] },
+];
+function isWhitelistedProduct(name){
+  const n = String(name || '');
+  for (const w of CROP_WHITELIST) {
+    if (w.exclude && w.exclude.some(x => n.indexOf(x) === 0)) continue;
+    if (n.indexOf(w.match) === 0) return true;
+  }
+  return false;
+}
+
 /* ---- normalize rows per source into common objects with perKg ---- */
 function normalize(srcKey, week){
   const src = DATA.price[srcKey];
@@ -427,13 +464,18 @@ function fillPeriods(){
   fillCats();
 }
 function fillCats(){
-  const rows=normalize($('fSource').value,$('fPeriod').value);
+  const srcKey=$('fSource').value;
+  let rows=normalize(srcKey,$('fPeriod').value);
+  if(srcKey==='talaadthai' || srcKey==='simummuang') rows=rows.filter(r=>isWhitelistedProduct(r.product));
   const cats=[...new Set(rows.map(r=>r.group))];
   const sel=$('fCat'); sel.innerHTML='<option value="__all">ทั้งหมด</option>';
   cats.forEach(c=>{const o=document.createElement('option');o.value=c;o.textContent=c;sel.appendChild(o);});
 }
 function currentRows(){
-  let rows=normalize($('fSource').value,$('fPeriod').value);
+  const srcKey=$('fSource').value;
+  let rows=normalize(srcKey,$('fPeriod').value);
+  // ตลาดไทย / สี่มุมเมือง เท่านั้น — สศก. มีตะกร้าสินค้าราชการของตัวเองอยู่แล้ว ไม่บังคับ whitelist นี้
+  if(srcKey==='talaadthai' || srcKey==='simummuang') rows=rows.filter(r=>isWhitelistedProduct(r.product));
   const cat=$('fCat').value, q=$('fSearch').value.trim();
   if(cat && cat!=="__all") rows=rows.filter(r=>r.group===cat);
   if(q) rows=rows.filter(r=>r.product.includes(q));
@@ -468,7 +510,61 @@ function renderPrice(){
     <div class="kpi lo"><div class="v">${lo?fmt(lo.perKg):'-'}<small>${lo?lo.product:''}</small></div><div class="l">ถูกสุด (บาท/กก.)</div></div>`;
 
   renderTable(rows,src.type);
-  renderChart(rows,src.type);
+  try { renderChart(rows,src.type); } catch(e) { console.error('[chart render failed]', e); }
+  renderPriceWow();
+}
+
+/* ---- week-over-week comparison (เทียบสัปดาห์ที่เลือกกับสัปดาห์ก่อนหน้า) ----
+   คล้ายกับ Facebook Competitor Dashboard: หาแท็บ/สัปดาห์ก่อนหน้าตามลำดับเวลา แล้วเทียบ
+   ค่าสถิติเดียวกับที่ KPI แถวบนคำนวณอยู่แล้ว (จำนวนรายการ, ราคาเฉลี่ยต่อกก.) ผูกกับ
+   ตัวกรองหมวดพืช/คำค้นหาปัจจุบันด้วย เพื่อให้เทียบพืชกลุ่มเดียวกันจริง ๆ ---- */
+function sortedPeriods(srcKey){
+  return Object.keys(DATA.price[srcKey].weeks).sort().reverse();
+}
+function getPreviousPeriod(srcKey, period){
+  const ps = sortedPeriods(srcKey);
+  const idx = ps.indexOf(period);
+  if (idx === -1 || idx >= ps.length - 1) return null;
+  return ps[idx + 1];
+}
+function filteredRowsFor(srcKey, period){
+  let rows = normalize(srcKey, period);
+  if(srcKey==='talaadthai' || srcKey==='simummuang') rows=rows.filter(r=>isWhitelistedProduct(r.product));
+  const cat=$('fCat').value, q=$('fSearch').value.trim();
+  if(cat && cat!=="__all") rows=rows.filter(r=>r.group===cat);
+  if(q) rows=rows.filter(r=>r.product.includes(q));
+  return rows;
+}
+function priceStats(rows){
+  const kg=rows.filter(r=>r.perKg!=null), kgVals=kg.map(r=>r.perKg);
+  const avgKg = kgVals.length? kgVals.reduce((a,b)=>a+b,0)/kgVals.length : null;
+  const repVals = rows.map(r=>r.rep).filter(v=>v!=null && !isNaN(v));
+  const avgRep = repVals.length? repVals.reduce((a,b)=>a+b,0)/repVals.length : null;
+  return { count: rows.length, avgKg, avgRep };
+}
+function wowDeltaChip(cur, prev){
+  if(cur==null || prev==null) return '<span style="color:var(--muted)">-</span>';
+  if(prev===0) return cur===0 ? '<span class="chip flat">±0%</span>' : '<span class="chip up">▲ ใหม่</span>';
+  const d = Math.round(100*(cur-prev)/prev);
+  if(d===0) return '<span class="chip flat">±0%</span>';
+  return d>0 ? `<span class="chip up">▲ +${d}%</span>` : `<span class="chip down">▼ ${d}%</span>`;
+}
+function renderPriceWow(){
+  const el=$('priceWow');
+  const srcKey=$('fSource').value, period=$('fPeriod').value;
+  const prevPeriod=getPreviousPeriod(srcKey, period);
+  if(!prevPeriod){
+    el.innerHTML = `<div class="kpi wow-head"><div class="v" style="font-size:15px">${period}</div><div class="l">นี่คือสัปดาห์แรกสุดของแหล่งนี้ — ไม่มีสัปดาห์ก่อนหน้าให้เปรียบเทียบ</div></div>`;
+    return;
+  }
+  const cur=priceStats(filteredRowsFor(srcKey, period));
+  const prev=priceStats(filteredRowsFor(srcKey, prevPeriod));
+  const fp = v => v==null? '-' : fmt(v)+' บาท';
+  el.innerHTML =
+    `<div class="kpi wow-head"><div class="v" style="font-size:15px">${period}</div><div class="l">เทียบกับสัปดาห์ก่อนหน้า: ${prevPeriod}</div></div>` +
+    `<div class="kpi"><div class="v">${fmt(cur.count)}</div><div class="l">จำนวนรายการ</div><div class="l">สัปดาห์ก่อน ${fmt(prev.count)} · ${wowDeltaChip(cur.count, prev.count)}</div></div>` +
+    `<div class="kpi"><div class="v">${fp(cur.avgKg)}</div><div class="l">ราคาเฉลี่ยต่อกก.</div><div class="l">สัปดาห์ก่อน ${fp(prev.avgKg)} · ${wowDeltaChip(cur.avgKg, prev.avgKg)}</div></div>` +
+    `<div class="kpi"><div class="v">${fp(cur.avgRep)}</div><div class="l">ราคาเฉลี่ย (ทุกหน่วย)</div><div class="l">สัปดาห์ก่อน ${fp(prev.avgRep)} · ${wowDeltaChip(cur.avgRep, prev.avgRep)}</div></div>`;
 }
 
 function renderTable(rows,type){
@@ -506,7 +602,10 @@ function renderChart(rows,type){
   $('chartNote').textContent = useKg
     ? "* แท่งกราฟคือราคาต่อกิโลกรัมโดยประมาณ เพื่อให้เปรียบเทียบข้ามสินค้าได้ (สินค้าหน่วยอื่น เช่น กระสอบ/หวี ไม่แสดงในกราฟ)"
     : "* หน่วยแตกต่างกันตามสินค้า ควรดูรายละเอียดในตารางประกอบ";
-  const labels=data.map(r=>r.product);
+  // สี่มุมเมืองรวมราคาต่อ "พืช" ไว้ และเก็บหน่วยแยกคอลัมน์ต่างหาก — ต่อชื่อ+หน่วยเข้าด้วยกัน
+  // ในป้ายกำกับกราฟเท่านั้น เพื่อแยกแยะแถวเดียวกันที่ขายกันคนละหน่วย (เช่น มะนาว /กก. vs /ถุง)
+  // ตลาดไทยมีหน่วยต่อท้ายชื่อสินค้ามาอยู่แล้วจากต้นทาง จึงไม่ต้องต่อซ้ำ
+  const labels=data.map(r=> type==='simummuang' && r.unit ? `${r.product} /${r.unit}` : r.product);
   const vals=data.map(r=>useKg?r.perKg:r.rep);
   if(chart) chart.destroy();
   chart=new Chart($('priceChart'),{
